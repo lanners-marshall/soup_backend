@@ -17,9 +17,9 @@ const categoriesRoutes = require('./Routes/categoriesRoutes')
 const staffRoutes = require('./Routes/staffRoutes')
 const itemsRoutes = require('./Routes/itemsRoutes')
 
-// server.use('/categories', categoriesRoutes)
+server.use('/categories', categoriesRoutes)
 server.use('/staff', staffRoutes)
-// server.use('/items', staffRoutes)
+server.use('/items', itemsRoutes)
 
 module.exports = {
   server
