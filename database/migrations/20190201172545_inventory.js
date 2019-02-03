@@ -6,7 +6,7 @@ exports.up = function(knex, Promise) {
 			.notNullable()
 			.unique();
 		table.integer('amount').notNullable();
-		table.string('unit').notNullable()
+		table.string('unit')
 		table
 			.integer('categoryID')
 			.unsigned()
