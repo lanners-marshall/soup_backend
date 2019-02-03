@@ -226,3 +226,11 @@ a **DELETE** request to */api/staff/:id* will return an object with a count of 1
 {
     deletedRecords: 1
 }
+
+***Note:*** All **errors** will come back as an object like so: 
+ex. Missing input on login
+
+{
+    message: "Input cannot be blank.",
+    error: 400
+}
