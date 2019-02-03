@@ -1,116 +1,132 @@
 const express = require('express');
 const router = express.Router();
-const knex = require('knex')
-const dbConfig = require('../knexfile')
-const db = knex(dbConfig.development)
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const secret = 'secret'
+const db = require('../database/helpers/staffHelper');
+const bcrypt = require('bcryptjs');
+const responseStatus = require('../config/responseStatuses');
+const {
+	generateToken,
+	protects,
+	emptyCheck
+} = require('../middleware/authMiddleware');
 
 // const secret = require('./keys').jwtKey;
 
-function generateToken(user){
-	const payload = {
-		username: user.name,
-	};
-	const options = {
-		expiresIn: '1h',
-		jwtid: '12345'
-	}
-	return jwt.sign(payload, secret, options)
-}
-
 //Create
 //create a new user and session
-router.post('/register', (req, res) => {
-	const creds = req.body
+router.post('/register', emptyCheck, (req, res, next) => {
+	const creds = req.body;
 	const hash = bcrypt.hashSync(creds.password, 12);
 	creds.password = hash;
-	db('staff')
-		.insert(creds)
-		.then(ids => {
-			const id = ids[0]
-			db('staff')
-			.where({id})
-			.first()
-			.then(user => {
-				const token = generateToken(user);
-				return res.status(200).json({token, id: user.id, name: user.name})
-			})
-			.catch(err => {
-				console.log(err)
-				res.status(500).json({msg: 'error generating token'})
-			})
-	})
-	.catch(err => {
-		console.log(err)
-		res.status(500).json({msg: "there was an error registering user"})
-	})
-})
+	db.registerUser(creds)
+		.then((user) => {
+			const token = generateToken(user);
+			 res.status(responseStatus.created).json({
+				token,
+				id: user.id,
+				email: user.email,
+				message: 'Registration successful.'
+			});
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
-//Create
-//create a new user session
-router.post('/login', (req, res) => {
+//Login
+//login user and create a new user session
+router.post('/login', emptyCheck, (req, res, next) => {
 	const creds = req.body;
-	db('staff')
-		.where({name: creds.name})
-		.first()
-		.then(user => {
-			if (user && bcrypt.compareSync(creds.password, user.password)){
-				const token = generateToken(user)
-				return res.status(200).json({token, id: user.id, name: user.name})
+	db.loginUser(creds)
+		.then((user) => {
+			if (user && bcrypt.compareSync(creds.password, user.password)) {
+				const token = generateToken(user);
+				return res.status(responseStatus.successful).json({
+					token,
+					message: 'User logged in successfully.',
+					id: user.id,
+					email: user.email
+				});
 			} else {
-				res.status(401).json({msg: 'you have failed to log in'})
+				next(responseStatus.badCredentials);
 			}
 		})
-})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
+//Read
+//get all users
+router.get('/', protects, (req, res, next) => {
+	db.getUsers()
+		.then((staff) => {
+			res
+				.status(responseStatus.successful)
+				.json({ staff, decodedToken: req.decodedToken });
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 //Read
 //get a user by id
-router.get('/:id', (req, res) => {
-	const { id } = req.params
-	db('staff')
-	.where({id})
-	.then(response => {
-		let obj = {name: response[0].name, email: response[0].email}
-		res.status(200).json(obj)
-	})
-	.catch(error => {
-		console.log(error)
-		res.status(500).json({msg: 'error getting users information'})
-	})
-})
+router.get('/:id', protects, (req, res, next) => {
+	const { id } = req.params;
+	db.getUsers(id)
+		.then((staff) => {
+			res
+				.status(responseStatus.successful)
+				.json({ staff, decodedToken: req.decodedToken });
+		})
+		.catch((err) => {
+			if (TypeError) {
+				next(responseStatus.notFound);
+			} else {
+				console.log(err);
+				next(responseStatus.serverError);
+			}
+		});
+});
 
 //Update
 //update a users account
-router.put('/:id', (req, res) => {
+router.put('/:id', emptyCheck, (req, res, next) => {
 	const { id } = req.params;
-	const {name, email} = req.body
-	db('staff')
-		.where({id})
-		.update({name, email})
-		.then(response => {
-			res.status(200).json(response)
+	const user = req.body;
+
+	db.updateUser(id, user)
+		.then((count) => {
+			if (count === 1) {
+				res.status(responseStatus.successful).json({ updatedRecords: count });
+			} else {
+				next(responseStatus.notFound);
+			}
 		})
-		.catch(error => {
-			res.status(500).json({msg: 'there was an error updating user'})
-		})
-})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 //Delete
 //delete a user
-router.delete('/:id', (req, res) => {
+router.delete('/:id', (req, res, next) => {
 	const { id } = req.params;
-	db('staff')
-	.where({id})
-	.del()
-	.then(response => {
-		res.status(200).json(response)
-	})
-	.catch(error => {
-		res.status(500).json(error)
-	})
-})
-
+	db.deleteUser(id)
+		.then((count) => {
+			if (count === 1) {
+				res.status(responseStatus.successful).json({ deletedRecords: count });
+			} else {
+				next(responseStatus.notFound);
+			}
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 module.exports = router;

@@ -1,96 +1,92 @@
 const express = require('express');
 const router = express.Router();
-const knex = require('knex')
-const dbConfig = require('../knexfile')
-const db = knex(dbConfig.development)
-
-const protects = require('./middleWear.js');
-
+const responseStatus = require('../config/responseStatuses');
+const { protects, emptyCheck } = require('../middleware/authMiddleware');
+const db = require('../database/helpers/categoriesHelper');
 
 //Create
 //create a new category
-router.post('', (req, res) => {
-	const {name} = req.body
-	if (!req.body.name){
-		return res.status(400).json({msg: 'please provide a category name'})
-	}
-	db.insert({name}).into('categories')
-	.then(response => {
-		return res.status(201).json(response)
-	})
-	.catch(error => {
-		return res.status(500).json(error)
-	})
-})
+router.post('/', emptyCheck, (req, res, next) => {
+	const { body } = req;
+	db.addCategory(body)
+		.then((id) => {
+			return res.status(responseStatus.created).json({ categoryID: id });
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 //Read
-//get all catagories
-router.get('', protects, (req, res) => {
-	db('categories')
-		.then(response => {
-			return res.status(200).json(response)
+//get all categories
+router.get('/', protects, (req, res, next) => {
+	db.getCategories()
+		.then((categories) => {
+			return res
+				.status(responseStatus.successful)
+				.json({ categories, decodedToken: req.decodedToken });
 		})
-		.catch(error => {
-			console.log(error)
-			return res.status(500).json({msg: 'there was an error getting categories'})
-		})
-})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 //Read
-//get all items for a catagory
-router.get('/:id', (req, res) => {
-	const {id} = req.params
-	db('categories')
-	.where({id})
-	.first()
-	.then(response => {
-		let name = response.name
-		db('categories')
-		.join('items', 'categories.id', 'items.categoryID')
-		.where('items.categoryID', id)
-		.then(response => {
-			let ar = []
-			ar.push({catagory_name: name})
-			for (let i = 0; i < response.length; i++){
-				ar.push(response[i]);
+//get all items for a category
+router.get('/:id', protects, (req, res, next) => {
+	const { id } = req.params;
+	db.getCategories(id)
+		.then((category) => {
+			res
+				.status(responseStatus.successful)
+				.json({ category, decodedToken: req.decodedToken });
+		})
+		.catch((err) => {
+			if (TypeError) {
+				next(responseStatus.notFound);
+			} else {
+				next(responseStatus.serverError);
 			}
-			return res.status(200).json(ar)
-		})
-		.catch(error => {
-			return res.status(200).json(error)
-		})
-	})
-})
+		});
+});
 
 //Update
-//update a specific catagory
-router.put('/:id', (req, res) => {
-	const {id} = req.params
-	const {name} = req.body
-	db('categories')
-	.where({id})
-	.update({name})
-	.then(response => {
-		return res.status(200).json(response)
-	})
-	.catch(error => {
-		return res.status(500).json({msg: 'error updating catagory'})
-	})
-})
+//update a specific category
+router.put('/:id', emptyCheck, (req, res, next) => {
+	const { id } = req.params;
+	const { body } = req;
+	db.updateCategory(id, body)
+		.then((count) => {
+			if (count === 1) {
+				res.status(responseStatus.successful).json({ updatedRecords: count });
+			} else {
+				next(responseStatus.notFound);
+			}
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 //Delete
-//delete a specific catagory
-router.delete('/:id', (req, res) => {
-	const {id} = req.params
-	db('categories')
-	.where({id})
-	.del()
-	.then(response => {
-		return res.status(200).json(response)
-	})
-	.catch(error => {
-		return res.status(500).json({msg: 'error deleting catagory'})
-	})
-})
+//delete a specific category
+router.delete('/:id', (req, res, next) => {
+	const { id } = req.params;
+	db.deleteCategory(id)
+		.then((count) => {
+			if (count === 1) {
+				res.status(responseStatus.successful).json({ deletedRecords: count });
+			} else {
+				next(responseStatus.notFound);
+			}
+		})
+		.catch((err) => {
+			console.log(err);
+			next(responseStatus.serverError);
+		});
+});
 
 module.exports = router;
